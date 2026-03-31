@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Cameras</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #111; color: #fff; font-family: sans-serif; padding: 16px; }
+    h1 { font-size: 1.2rem; margin-bottom: 16px; color: #aaa; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+    .cam { background: #1c1c1e; border-radius: 12px; overflow: hidden; text-decoration: none; color: #fff; display: block; }
+    .cam:active { opacity: 0.7; }
+    .thumb-wrap { position: relative; aspect-ratio: 16/9; background: #000; }
+    .thumb-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .thumb-wrap .offline { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; color: #555; }
+    .label { padding: 10px 12px; font-size: 0.9rem; font-weight: 600; }
+    .label span { font-size: 0.75rem; color: #888; font-weight: 400; margin-left: 6px; }
+  </style>
+</head>
+<body>
+  <h1>Cameras</h1>
+  <div class="grid" id="grid"></div>
+
+  <script>
+    const CAMERAS = [
+      { id: 'cam1', label: 'Camera 1', href: '/cameras/cam1.html' },
+      { id: 'cam2', label: 'Camera 2', href: '/cameras/cam2.html' },
+      { id: 'cam3', label: 'Tapo C520WS', href: '/cameras/tapo.html' },
+    ];
+
+    const REFRESH_MS = 5000;
+
+    function buildGrid() {
+      const grid = document.getElementById('grid');
+      CAMERAS.forEach(cam => {
+        const a = document.createElement('a');
+        a.href = cam.href;
+        a.className = 'cam';
+        a.innerHTML = `
+          <div class="thumb-wrap">
+            <img id="img-${cam.id}" alt="${cam.label}">
+            <div class="offline" id="off-${cam.id}">Offline</div>
+          </div>
+          <div class="label">${cam.label} <span id="age-${cam.id}"></span></div>
+        `;
+        grid.appendChild(a);
+      });
+    }
+
+    function refreshThumbs() {
+      CAMERAS.forEach(cam => {
+        const img = document.getElementById('img-' + cam.id);
+        const off = document.getElementById('off-' + cam.id);
+        const age = document.getElementById('age-' + cam.id);
+        const url = `/cameras/thumbs/${cam.id}.jpg?t=` + Date.now();
+        const t = new Image();
+        t.onload = () => {
+          img.src = t.src;
+          off.style.display = 'none';
+          img.style.display = 'block';
+          age.textContent = 'live';
+        };
+        t.onerror = () => {
+          off.style.display = 'flex';
+          img.style.display = 'none';
+          age.textContent = '';
+        };
+        t.src = url;
+      });
+    }
+
+    buildGrid();
+    refreshThumbs();
+    setInterval(refreshThumbs, REFRESH_MS);
+  </script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+# Node modules
+local-test/node_modules/
+tapo-ptz/node_modules/
+
+# Logs (contain user emails)
+logs/
+
+# Secrets
+.env
+setup.md
+
+# Sensitive config files — contain passwords, tokens, secrets
+docker-compose.yml
+playbook.yml
+mediamtx.yml
+grab-thumbs.sh
+allowed_emails.txt
+
+# Generated from templates by deploy.sh (contain real credentials)
+www/cam1.html
+www/cam2.html
+www/tapo.html

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Camera 2</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #111; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; padding: 24px; gap: 16px; }
+    h1 { font-size: 1.2rem; opacity: 0.7; }
+    #container { position: relative; width: 100%; max-width: 900px; }
+    video { width: 100%; border-radius: 10px; background: #000; aspect-ratio: 16/9; display: block; }
+    .status { font-size: 0.75rem; opacity: 0.4; margin-top: 8px; }
+    video.fullscreen {
+      position: fixed; inset: 0; z-index: 9999;
+      width: 100vw; height: 100vh;
+      border-radius: 0; object-fit: contain; background: #000;
+    }
+  </style>
+</head>
+<body>
+  <a href="/cameras/" style="font-size:1.1rem;font-weight:600;text-decoration:none;color:#fff;background:#ff453a;padding:14px 24px;border-radius:12px;align-self:stretch;text-align:center">← Cameras</a>
+  <h1>Camera 2</h1>
+  <div id="container">
+    <video id="cam2" controls autoplay muted playsinline></video>
+    <div class="status" id="status">Connecting...</div>
+  </div>
+
+  <script>
+    const PI = window.location.hostname;
+    const video = document.getElementById('cam2');
+    const status = document.getElementById('status');
+    const container = document.getElementById('container');
+
+    const ICE_SERVERS = [
+      { urls: 'stun:${COOKIE_DOMAIN}:3478' },
+      {
+        urls: ['turn:${COOKIE_DOMAIN}:3478', 'turn:${COOKIE_DOMAIN}:3478?transport=tcp'],
+        username: '${TURN_USERNAME}',
+        credential: '${TURN_PASSWORD}'
+      }
+    ];
+
+    async function start() {
+      try {
+        const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+        pc.addTransceiver('video', { direction: 'recvonly' });
+        pc.addTransceiver('audio', { direction: 'recvonly' });
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        await new Promise(resolve => {
+          if (pc.iceGatheringState === 'complete') { resolve(); return; }
+          const t = setTimeout(resolve, 8000);
+          pc.addEventListener('icegatheringstatechange', function h() {
+            if (pc.iceGatheringState === 'complete') { clearTimeout(t); pc.removeEventListener('icegatheringstatechange', h); resolve(); }
+          });
+        });
+        const resp = await fetch(`/whep/cam2/whep`, { method: 'POST', headers: { 'Content-Type': 'application/sdp' }, body: pc.localDescription.sdp });
+        if (!resp.ok) { pc.close(); throw new Error('WHEP ' + resp.status); }
+        const connected = new Promise((resolve, reject) => {
+          pc.ontrack = e => {
+            if (e.receiver && 'jitterBufferTarget' in e.receiver) e.receiver.jitterBufferTarget = 0;
+            if (!video.srcObject) { video.srcObject = e.streams[0]; status.textContent = 'Connected'; resolve(); keepLive(() => { pc.close(); video.srcObject = null; start(); }); }
+          };
+          pc.oniceconnectionstatechange = () => {
+            if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+              pc.close(); reject(new Error('ICE ' + pc.iceConnectionState));
+            }
+          };
+        });
+        await pc.setRemoteDescription({ type: 'answer', sdp: await resp.text() });
+        await connected;
+      } catch (e) {
+        status.textContent = 'Falling back to HLS...';
+        fallbackHLS();
+      }
+    }
+
+    function fallbackHLS() {
+      const hlsUrl = `/hls/cam2/index.m3u8`;
+      if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+        const hls = new Hls({ lowLatencyMode: true });
+        hls.loadSource(hlsUrl);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => { status.textContent = 'HLS'; });
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = hlsUrl;
+        status.textContent = 'HLS';
+      }
+    }
+
+    function keepLive(reconnect) {
+      let lastTime = -1, stalledFor = 0, startWall = null, startVideo = null;
+      setInterval(() => {
+        if (video.paused || video.readyState < 2) return;
+        if (video.currentTime === lastTime) {
+          stalledFor += 500;
+          if (stalledFor >= 3000) { stalledFor = 0; startWall = null; reconnect(); }
+        } else {
+          stalledFor = 0;
+          if (startWall === null) { startWall = Date.now(); startVideo = video.currentTime; }
+          const lag = ((Date.now() - startWall) / 1000) - (video.currentTime - startVideo);
+          if (lag > 4) { startWall = null; reconnect(); }
+          lastTime = video.currentTime;
+        }
+      }, 500);
+    }
+
+    start();
+
+    function handleOrientation() {
+      const isLandscape = window.matchMedia('(orientation: landscape)').matches;
+      video.classList.toggle('fullscreen', isLandscape);
+    }
+    screen.orientation.addEventListener('change', handleOrientation);
+    window.addEventListener('orientationchange', handleOrientation);
+    handleOrientation();
+  </script>
+</body>
+</html>

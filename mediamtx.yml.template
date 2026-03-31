@@ -1,0 +1,33 @@
+logLevel: info
+
+rtsp: yes
+rtspAddress: :8554
+rtmp: no
+srt: no
+
+hls: yes
+hlsAddress: :8888
+hlsVariant: lowLatency
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+hlsPartDuration: 200ms
+
+webrtc: yes
+webrtcAddress: :8889
+webrtcLocalUDPAddress: :8189
+webrtcLocalTCPAddress: :8890
+webrtcICEServers2:
+  - url: turn:${COOKIE_DOMAIN}:3478
+    username: "${TURN_USERNAME}"
+    password: "${TURN_PASSWORD}"
+
+paths:
+  cam1:
+    source: rtsp://192.168.1.230/user=admin&password=&channel=1&stream=0.sdp
+    rtspTransport: tcp
+  cam2:
+    source: rtsp://192.168.1.230/user=admin&password=&channel=2&stream=0.sdp
+    rtspTransport: tcp
+  cam3:
+    source: "rtsp://${TAPO_USER}:${TAPO_PASS}@192.168.1.147/stream2"
+    rtspTransport: tcp

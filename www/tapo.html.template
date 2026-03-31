@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>TAPO C520WS</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #111; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; padding: 24px; gap: 20px; }
+    h1 { font-size: 1.2rem; opacity: 0.7; }
+
+    #container { position: relative; width: 100%; max-width: 900px; }
+    video { width: 100%; border-radius: 10px; background: #000; aspect-ratio: 16/9; display: block; }
+
+    .controls { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; justify-content: center; margin-top: 20px; }
+    .dpad { display: grid; grid-template-columns: repeat(3, 52px); grid-template-rows: repeat(3, 52px); gap: 4px; }
+    .dpad button { width: 52px; height: 52px; background: #222; border: 1px solid #444; border-radius: 8px; color: #fff; font-size: 1.3rem; cursor: pointer; transition: background 0.1s; }
+    @media (orientation: portrait) {
+      .dpad { grid-template-columns: repeat(3, 80px); grid-template-rows: repeat(3, 80px); gap: 8px; }
+      .dpad button { width: 80px; height: 80px; font-size: 1.8rem; border-radius: 12px; }
+    }
+    .dpad button.pressed { background: #0a84ff; }
+    .dpad .empty { background: transparent; border: none; pointer-events: none; }
+    .zoom { display: flex; flex-direction: column; gap: 4px; }
+    .zoom button { width: 52px; height: 52px; background: #222; border: 1px solid #444; border-radius: 8px; color: #fff; font-size: 1.4rem; cursor: pointer; transition: background 0.1s; }
+    .zoom button.pressed { background: #30d158; }
+    .audio { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+    .audio button { width: 52px; height: 52px; background: #222; border: 1px solid #444; border-radius: 8px; color: #fff; font-size: 1.4rem; cursor: pointer; }
+    .audio button.active { background: #ff453a; }
+    .audio label { font-size: 0.7rem; opacity: 0.5; text-align: center; }
+    .status { font-size: 0.75rem; opacity: 0.4; }
+    .presets { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 16px; }
+    .preset-btn { flex: 1; min-width: 120px; padding: 16px; background: #222; border: 1px solid #444; border-radius: 12px; color: #fff; font-size: 1rem; font-weight: 600; cursor: pointer; }
+    .preset-btn:active { background: #0a84ff; }
+    .preset-save { padding: 10px 16px; background: #30d158; border: none; border-radius: 10px; color: #fff; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
+
+    /* Fullscreen overlay styles */
+    #container:fullscreen,
+    #container:-webkit-full-screen {
+      width: 100vw; height: 100vh; max-width: none; background: #000;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #container:fullscreen video,
+    #container:-webkit-full-screen video {
+      width: 100%; height: 100%; border-radius: 0; object-fit: contain;
+    }
+    #container:fullscreen .controls,
+    #container:-webkit-full-screen .controls {
+      position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
+      margin-top: 0; background: rgba(0,0,0,0.5); padding: 12px 20px; border-radius: 16px;
+    }
+    #container:fullscreen .status,
+    #container:-webkit-full-screen .status { display: none; }
+    #container:fullscreen .presets,
+    #container:-webkit-full-screen .presets {
+      position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.5); padding: 10px 16px; border-radius: 16px;
+    }
+  </style>
+</head>
+<body>
+  <h1>TAPO C520WS</h1>
+  <a href="/cameras/" style="font-size:1.1rem;font-weight:600;text-decoration:none;color:#fff;background:#ff453a;padding:14px 24px;border-radius:12px;align-self:stretch;text-align:center">← Cameras</a>
+
+  <div id="container">
+    <video id="video" autoplay muted playsinline></video>
+    <div class="controls">
+      <div class="dpad">
+        <div class="empty"></div>
+        <button data-x="0"     data-y="1.0"  data-z="0">▲</button>
+        <div class="empty"></div>
+        <button data-x="-0.6"  data-y="0"    data-z="0">◀</button>
+        <div class="empty"></div>
+        <button data-x="0.6"   data-y="0"    data-z="0">▶</button>
+        <div class="empty"></div>
+        <button data-x="0"     data-y="-1.0" data-z="0">▼</button>
+        <div class="empty"></div>
+      </div>
+<div class="audio">
+        <button id="muteBtn" class="active" onclick="toggleMute()">🔇</button>
+        <label>Audio</label>
+      </div>
+    </div>
+    <div class="status" id="status">Connecting...</div>
+    <div class="presets" id="presets">
+      <button class="preset-btn" onclick="gotoPreset('left')">◀ Left</button>
+      <button class="preset-btn" onclick="gotoPreset('right')">Right ▶</button>
+    </div>
+  </div>
+
+  <script>
+    const video = document.getElementById('video');
+    const status = document.getElementById('status');
+    const container = document.getElementById('container');
+
+    const ICE_SERVERS = [
+      { urls: 'stun:${COOKIE_DOMAIN}:3478' },
+      {
+        urls: ['turn:${COOKIE_DOMAIN}:3478', 'turn:${COOKIE_DOMAIN}:3478?transport=tcp'],
+        username: '${TURN_USERNAME}',
+        credential: '${TURN_PASSWORD}'
+      }
+    ];
+
+    async function startStream() {
+      try {
+        const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+        pc.addTransceiver('video', { direction: 'recvonly' });
+        pc.addTransceiver('audio', { direction: 'recvonly' });
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        await new Promise(resolve => {
+          if (pc.iceGatheringState === 'complete') { resolve(); return; }
+          const t = setTimeout(resolve, 8000);
+          pc.addEventListener('icegatheringstatechange', function h() {
+            if (pc.iceGatheringState === 'complete') { clearTimeout(t); pc.removeEventListener('icegatheringstatechange', h); resolve(); }
+          });
+        });
+        const res = await fetch(`/whep/cam3/whep`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/sdp' },
+          body: pc.localDescription.sdp
+        });
+        if (!res.ok) { pc.close(); throw new Error('WHEP ' + res.status); }
+        const connected = new Promise((resolve, reject) => {
+          pc.ontrack = e => {
+            if (e.receiver && 'jitterBufferTarget' in e.receiver) e.receiver.jitterBufferTarget = 0;
+            if (e.streams[0] && video.srcObject !== e.streams[0]) {
+              video.srcObject = e.streams[0];
+              video.play().catch(() => {});
+              status.textContent = 'Stream connected'; resolve(); keepLive(() => { pc.close(); video.srcObject = null; startStream(); });
+            }
+          };
+          pc.oniceconnectionstatechange = () => {
+            if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+              pc.close(); reject(new Error('ICE ' + pc.iceConnectionState));
+            }
+          };
+        });
+        await pc.setRemoteDescription({ type: 'answer', sdp: await res.text() });
+        await connected;
+      } catch (e) {
+        status.textContent = 'Falling back to HLS...';
+        fallbackHLS();
+      }
+    }
+
+    function fallbackHLS() {
+      const hlsUrl = `/hls/cam3/index.m3u8`;
+      if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+        const hls = new Hls({ lowLatencyMode: true });
+        hls.loadSource(hlsUrl);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => { status.textContent = 'HLS'; });
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = hlsUrl;
+        video.play().catch(() => {});
+        status.textContent = 'HLS';
+      }
+    }
+
+    function keepLive(reconnect) {
+      let lastTime = -1, stalledFor = 0, startWall = null, startVideo = null;
+      setInterval(() => {
+        if (video.paused || video.readyState < 2) return;
+        if (video.currentTime === lastTime) {
+          stalledFor += 500;
+          if (stalledFor >= 3000) { stalledFor = 0; startWall = null; reconnect(); }
+        } else {
+          stalledFor = 0;
+          if (startWall === null) { startWall = Date.now(); startVideo = video.currentTime; }
+          const lag = ((Date.now() - startWall) / 1000) - (video.currentTime - startVideo);
+          if (lag > 4) { startWall = null; reconnect(); }
+          lastTime = video.currentTime;
+        }
+      }, 500);
+    }
+
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    if (isIOS) {
+      fallbackHLS();
+    } else {
+      startStream();
+    }
+
+    let muted = true;
+    window.toggleMute = function() {
+      muted = !muted;
+      video.muted = muted;
+      const btn = document.getElementById('muteBtn');
+      btn.textContent = muted ? '🔇' : '🔊';
+      btn.classList.toggle('active', muted);
+    };
+
+    const clientId = Math.random().toString(36).slice(2);
+    const isAdmin = new URLSearchParams(location.search).get('user') === 'admin';
+
+    async function gotoPreset(name) {
+      try {
+        moving = false;
+        document.querySelectorAll('.dpad button, .zoom button').forEach(b => b.classList.remove('pressed'));
+        await ptz(0, 0, 0);
+        status.textContent = 'Moving to preset...';
+        const res = await fetch('/tapo-ptz/preset/go', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name })
+        });
+        const data = await res.json();
+        status.textContent = data.error ? 'Preset error: ' + data.error : 'Ready';
+      } catch (e) {
+        status.textContent = 'Preset error: ' + e.message;
+      }
+    }
+
+    async function savePreset(name) {
+      const res = await fetch('/tapo-ptz/preset/save', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      });
+      const data = await res.json();
+      status.textContent = data.ok ? `Saved "${name}"` : 'Save error: ' + data.error;
+    }
+
+    if (isAdmin) {
+      const presetDiv = document.getElementById('presets');
+      presetDiv.insertAdjacentHTML('beforeend', `
+        <button class="preset-save" onclick="savePreset('left')">Set Left</button>
+        <button class="preset-save" onclick="savePreset('right')">Set Right</button>
+      `);
+    }
+
+    async function ptz(x, y, zoom) {
+      try {
+        const res = await fetch('/tapo-ptz/ptz', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ x, y, zoom, clientId })
+        });
+        const data = await res.json();
+        if (res.status === 409) { status.textContent = 'Camera in use'; return; }
+        if (data.error) status.textContent = 'PTZ: ' + data.error;
+      } catch (e) { status.textContent = 'PTZ error: ' + e.message; }
+    }
+
+    let moving = false;
+    document.querySelectorAll('.dpad button, .zoom button').forEach(btn => {
+      const x = parseFloat(btn.dataset.x);
+      const y = parseFloat(btn.dataset.y);
+      const z = parseFloat(btn.dataset.z);
+      btn.addEventListener('mousedown', () => { moving = true; btn.classList.add('pressed'); ptz(x, y, z); });
+      btn.addEventListener('touchstart', e => { e.preventDefault(); moving = true; btn.classList.add('pressed'); ptz(x, y, z); });
+    });
+    document.addEventListener('mouseup', (e) => {
+      if (!moving || e.target.closest('.preset-btn, .preset-save')) return;
+      moving = false;
+      document.querySelectorAll('.dpad button, .zoom button').forEach(b => b.classList.remove('pressed'));
+      ptz(0, 0, 0);
+    });
+    document.addEventListener('touchend', (e) => {
+      if (!moving || e.target.closest('.preset-btn, .preset-save')) return;
+      moving = false;
+      document.querySelectorAll('.dpad button, .zoom button').forEach(b => b.classList.remove('pressed'));
+      ptz(0, 0, 0);
+    });
+
+    function handleOrientation() {
+      const isLandscape = window.matchMedia('(orientation: landscape)').matches;
+      if (!isLandscape) { if (document.fullscreenElement) document.exitFullscreen(); return; }
+      if (!document.fullscreenElement) {
+        container.requestFullscreen().catch(() => {}).then(() => { screen.orientation.unlock(); });
+      }
+    }
+    screen.orientation.addEventListener('change', handleOrientation);
+    window.addEventListener('orientationchange', handleOrientation);
+  </script>
+</body>
+</html>

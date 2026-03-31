@@ -1,0 +1,62 @@
+# Public entry point — oauth2-proxy handles auth and redirects
+:80 {
+    reverse_proxy oauth2-proxy:4180 {
+        header_up X-Forwarded-Proto https
+    }
+}
+
+# Internal backend — only reachable via oauth2-proxy
+:8081 {
+    redir / /cameras/ 302
+
+    @portainer_exact path /portainer
+    redir @portainer_exact /portainer/ 301
+
+    handle_path /portainer/* {
+        reverse_proxy portainer:9000
+    }
+
+    @monitoring_exact path /monitoring
+    redir @monitoring_exact /monitoring/ 301
+
+    handle_path /monitoring/* {
+        reverse_proxy glances:61208
+    }
+
+    @nvr_exact path /nvr
+    redir @nvr_exact /nvr/ 301
+
+    handle_path /nvr/* {
+        reverse_proxy 192.168.1.230:80 {
+            header_up Authorization "Basic YWRtaW46YWRtaW4="
+            header_up Host "192.168.1.230"
+            transport http {
+                versions 1.1
+            }
+        }
+    }
+
+    @cameras path /cameras
+    redir @cameras /cameras/ 301
+
+    handle_path /cameras/* {
+        root * /srv/cameras
+        file_server
+    }
+
+    @tapo path /tapo /tapo/
+    redir @tapo /cameras/tapo.html 302
+
+    handle /tapo-ptz* {
+        reverse_proxy tapo-ptz:3001
+    }
+
+    handle_path /whep/* {
+        reverse_proxy mediamtx:8889
+    }
+
+    handle_path /hls/* {
+        reverse_proxy mediamtx:8888
+    }
+
+}

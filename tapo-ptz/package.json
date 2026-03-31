@@ -1,0 +1,8 @@
+{
+  "name": "tapo-ptz",
+  "version": "1.0.0",
+  "dependencies": {
+    "express": "^4.18.0",
+    "onvif": "^0.8.1"
+  }
+}
