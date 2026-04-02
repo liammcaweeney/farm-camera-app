@@ -7,6 +7,7 @@ app.use(express.json());
 const CAMERA_IP = process.env.TAPO_IP || '192.168.1.147';
 const CAMERA_USER = process.env.TAPO_USER;
 const CAMERA_PASS = decodeURIComponent(process.env.TAPO_PASS || '');
+const PTZ_ABSOLUTE = process.env.TAPO_PTZ_ABSOLUTE === '1';
 
 let cam = null;
 cam = new Cam({
@@ -67,6 +68,18 @@ app.post('/tapo-ptz/ptz', (req, res) => {
     cam.stop({ profileToken, panTilt: true, zoom: true }, err => {
       if (err) return res.status(500).json({ error: err.message });
       res.json({ ok: true });
+    });
+  } else if (PTZ_ABSOLUTE) {
+    // Camera doesn't support continuousMove — get current position then absoluteMove in direction
+    cam.getStatus({ profileToken }, (err, status) => {
+      const curX = (!err && status && status.position) ? parseFloat(status.position.x) : 0;
+      const curY = (!err && status && status.position) ? parseFloat(status.position.y) : 0;
+      const targetX = x !== 0 ? Math.sign(x) : curX;
+      const targetY = y !== 0 ? Math.sign(y) : curY;
+      cam.absoluteMove({ profileToken, x: targetX, y: targetY, zoom: 0 }, err2 => {
+        if (err2) return res.status(500).json({ error: err2.message });
+        res.json({ ok: true });
+      });
     });
   } else {
     cam.continuousMove({ profileToken, x, y, zoom }, err => {

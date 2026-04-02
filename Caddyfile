@@ -47,6 +47,11 @@
     @tapo path /tapo /tapo/
     redir @tapo /cameras/tapo.html 302
 
+    handle /tapo-ptz2* {
+        uri replace /tapo-ptz2 /tapo-ptz
+        reverse_proxy tapo-ptz2:3001
+    }
+
     handle /tapo-ptz* {
         reverse_proxy tapo-ptz:3001
     }
