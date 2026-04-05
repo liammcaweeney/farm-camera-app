@@ -46,8 +46,8 @@
     }
     #container:fullscreen .controls,
     #container:-webkit-full-screen .controls {
-      position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
-      margin-top: 0; background: rgba(0,0,0,0.5); padding: 12px 20px; border-radius: 16px;
+      position: absolute; bottom: 24px; left: 24px;
+      margin-top: 0; padding: 12px 20px; border-radius: 16px;
     }
     #container:fullscreen .status,
     #container:-webkit-full-screen .status { display: none; }
