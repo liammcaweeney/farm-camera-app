@@ -1,5 +1,11 @@
 # Public entry point — oauth2-proxy handles auth and redirects
 :80 {
+    handle /api/wedding-rsvp {
+        @denied not remote_ip 172.16.0.0/12
+        respond @denied "Forbidden" 403
+        reverse_proxy localhost:3000
+    }
+
     reverse_proxy oauth2-proxy:4180 {
         header_up X-Forwarded-Proto https
     }
@@ -46,6 +52,16 @@
 
     @tapo path /tapo /tapo/
     redir @tapo /cameras/tapo.html 302
+
+    handle /tapo-ptz4* {
+        uri replace /tapo-ptz4 /tapo-ptz
+        reverse_proxy tapo-ptz4:3001
+    }
+
+    handle /tapo-ptz3* {
+        uri replace /tapo-ptz3 /tapo-ptz
+        reverse_proxy tapo-ptz3:3001
+    }
 
     handle /tapo-ptz2* {
         uri replace /tapo-ptz2 /tapo-ptz
