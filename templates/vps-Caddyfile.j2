@@ -1,11 +1,4 @@
 killywilly.duckdns.org {
-    tls {
-        issuer acme {
-            dir https://api.buypass.com/acme/directory
-            email mcaweeneyl@gmail.com
-        }
-    }
-
     handle /api/wedding-rsvp {
         reverse_proxy localhost:{{ tunnel_port }}
     }

@@ -3,7 +3,8 @@
     handle /api/wedding-rsvp {
         @denied not remote_ip 172.16.0.0/12
         respond @denied "Forbidden" 403
-        reverse_proxy localhost:3000
+        uri replace /api/wedding-rsvp /rsvp
+        reverse_proxy host.docker.internal:3000
     }
 
     reverse_proxy oauth2-proxy:4180 {
