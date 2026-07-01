@@ -5,3 +5,7 @@ killywilly.duckdns.org {
 
     reverse_proxy localhost:{{ tunnel_port }}
 }
+
+wedding.killywilly.duckdns.org {
+    redir https://wedding-webapp-eta.vercel.app{uri} 301
+}
