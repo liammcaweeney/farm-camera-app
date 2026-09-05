@@ -31,3 +31,12 @@ paths:
   cam3:
     source: "rtsp://${TAPO_USER}:${TAPO_PASS}@192.168.1.147/stream2"
     rtspTransport: tcp
+  cam4:
+    source: "rtsp://${CAM4_USER}:${CAM4_PASS}@${CAM4_IP}/stream2"
+    rtspTransport: tcp
+  cam5:
+    source: "rtsp://${CAM5_USER}:${CAM5_PASS}@192.168.1.185/stream2"
+    rtspTransport: tcp
+  rosie:
+    source: "rtsp://${ROSIE_USER}:${ROSIE_PASS}@192.168.1.125/stream2"
+    rtspTransport: tcp
