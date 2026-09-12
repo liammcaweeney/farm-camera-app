@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>TAPO C520WS</title>
+  <title>Old Parlour</title>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -59,7 +59,7 @@
   </style>
 </head>
 <body>
-  <h1>TAPO C520WS</h1>
+  <h1>Old Parlour</h1>
   <a href="/cameras/" style="font-size:1.1rem;font-weight:600;text-decoration:none;color:#fff;background:#ff453a;padding:14px 24px;border-radius:12px;align-self:stretch;text-align:center">← Cameras</a>
 
   <div id="container">

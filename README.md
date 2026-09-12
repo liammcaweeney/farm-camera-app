@@ -70,7 +70,7 @@ WebRTC session negotiation (signalling) goes through the tunnel, but the actual 
 |----|--------|-------|-------|
 | cam1 | `rtsp://192.168.1.230` channel 1 | H265 | NVR |
 | cam2 | `rtsp://192.168.1.230` channel 2 | H265 | NVR |
-| cam3 | `rtsp://192.168.1.147/stream2` | H264 | Tapo C520WS PTZ |
+| cam3 | `rtsp://192.168.18.61/stream2` | H264 | Old Parlour — Tapo C520WS PTZ |
 
 All cameras use `rtspTransport: tcp` — UDP caused FU-A packetization errors and frame drops.
 
@@ -120,7 +120,7 @@ A cron job runs every 5 minutes (`/usr/local/bin/check-tunnel.sh`) that auto-res
 
 ## PTZ (Tapo C520WS)
 
-Controlled via ONVIF through the `tapo-ptz` Node.js service. Camera at `192.168.1.147:2020`.
+Controlled via ONVIF through the `tapo-ptz` Node.js service. Camera at `192.168.18.61:2020`.
 
 - Uses `absoluteMove`, not `gotoPreset` — camera rejects ONVIF preset tokens.
 - Presets stored in Docker volume `tapo_data:/data/presets.json`.

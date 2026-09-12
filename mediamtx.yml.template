@@ -29,5 +29,5 @@ paths:
     source: rtsp://192.168.1.230/user=admin&password=&channel=2&stream=0.sdp
     rtspTransport: tcp
   cam3:
-    source: "rtsp://${TAPO_USER}:${TAPO_PASS}@192.168.1.147/stream2"
+    source: "rtsp://${TAPO_USER}:${TAPO_PASS}@${TAPO_IP}/stream2"
     rtspTransport: tcp
