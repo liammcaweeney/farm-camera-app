@@ -16,10 +16,8 @@ webrtc: yes
 webrtcAddress: :8889
 webrtcLocalUDPAddress: :8189
 webrtcLocalTCPAddress: :8890
-webrtcICEServers2:
-  - url: turn:${COOKIE_DOMAIN}:3478
-    username: "${TURN_USERNAME}"
-    password: "${TURN_PASSWORD}"
+# Public IP + port-forward: advertise direct host candidates, no STUN/TURN needed.
+webrtcAdditionalHosts: [${COOKIE_DOMAIN}, 192.168.18.35]
 
 paths:
   cam1:

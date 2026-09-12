@@ -14,18 +14,3 @@ echo "$(date -Is) $RESULT" >> "$LOG"
 
 # Keep the log from growing forever
 tail -n 500 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
-
-# If the WAN IP changed, coturn needs its external-ip updated and a restart,
-# otherwise it advertises a stale relay address.
-WAN=$(curl -s --max-time 10 https://api.ipify.org)
-LAN=$(ip -4 -o addr show wlan0 | awk '{print $4}' | cut -d/ -f1)
-CONF=/home/admin/rpi/coturn.conf
-
-if [ -n "$WAN" ] && [ -n "$LAN" ] && [ -f "$CONF" ]; then
-  WANT="external-ip=${WAN}/${LAN}"
-  if ! grep -qx "$WANT" "$CONF"; then
-    sed -i -E "s|^external-ip=.*|${WANT}|" "$CONF"
-    echo "$(date -Is) external-ip -> ${WANT}, restarting coturn" >> "$LOG"
-    docker restart rpi-coturn-1 >/dev/null 2>&1
-  fi
-fi

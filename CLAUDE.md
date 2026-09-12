@@ -10,10 +10,10 @@ Ansible provisioning for a Raspberry Pi camera system. All infrastructure is man
 
 - `rpi` → `192.168.18.35` (local network; DHCP-reserved on the router for MAC `88:a2:9e:7f:ef:a2`)
 - `rpi-mdns` → `rpi.local` (mDNS fallback)
-- `rpi-ts` → `<tailscale-ip>` (Tailscale)
+- `rpi-ts` → `<tailscale-ip>` (Tailscale — SSH/admin only; it carries **no** camera or web traffic and is not part of the data path)
 - User: `admin`
 - Key has a passphrase — run `ssh-add ~/.ssh/id_rsa` before running Ansible
-- All aliases set `ConnectionAttempts 5` / `ServerAliveInterval 15`. The WiFi link is weak and single attempts frequently time out during banner exchange — retry before concluding the Pi is down.
+- All aliases set `ConnectionAttempts 5` / `ServerAliveInterval 15`. The Pi's WiFi is strong now (`-35 dBm`, 433 Mbit/s, 0% loss on 1400-byte pings, ~5 ms RTT, measured 2026-09-12) — if SSH times out, suspect something else first. Retry once before concluding the Pi is down.
 - Saturating the uplink (e.g. a large `docker pull`) starves SSH completely. If the Pi goes unreachable mid-task, check for a running pull before assuming a crash.
 
 ## Running Ansible
@@ -54,7 +54,9 @@ Browser → router port-forward :80/:443 → Pi Caddy (terminates TLS, Let's Enc
 
 **The Oracle VPS is gone** (free-tier instance reclaimed, discovered 2026-08-07). There is no reverse SSH tunnel any more. The Pi sits behind a plain port-forward on a public, non-CGNAT home IP and serves HTTPS itself.
 
-This was only possible because the home connection has a real routable IP (`194.46.233.45` at time of writing, residential so it can rotate). The VPS existed originally to work around CGNAT; if the ISP ever moves this line behind CGNAT, direct exposure stops working and the fallback is Cloudflare Tunnel (outbound-only, no port-forward, but it cannot carry UDP TURN).
+This was only possible because the home connection has a real routable IP (`193.120.11.191` as of 2026-09-12; the user reports it is now static). The VPS existed originally to work around CGNAT; if the ISP ever moves this line behind CGNAT, direct exposure stops working and the fallback is Cloudflare Tunnel (outbound-only, no port-forward — but it cannot carry WebRTC UDP, so streaming would drop to HLS only).
+
+**coturn/TURN was removed on 2026-09-12.** With the Pi on a public IP, ICE completes directly for every client (including phones on carrier NAT) because only one side needs to be reachable; UDP-blocked networks fall back to ICE-TCP on 8890. Do not reintroduce a relay.
 
 ## Public URL
 
@@ -62,7 +64,6 @@ This was only possible because the home connection has a real routable IP (`194.
 
 `duckdns/duck.sh` runs every 5 min from admin's crontab. It deliberately sends **no** `&ip=` parameter, so DuckDNS records the source IP of the request — the current home WAN IP. It previously hardcoded the VPS IP, which is why DNS kept resolving to a dead host after the VPS was reclaimed. Never reintroduce a hardcoded `ip=`.
 
-The same script rewrites coturn's `external-ip` and restarts it when the WAN IP changes.
 
 ## Services
 
@@ -74,13 +75,18 @@ The same script rewrites coturn's `external-ip` and restarts it when the WAN IP 
 
 ## Cameras
 
-> **Currently all offline.** The cameras are on `192.168.1.x`; the Pi has moved to `192.168.18.x`, so none are reachable. All six mediamtx paths report `ready=false`. When the cameras are back on this network their IPs must be updated in `mediamtx.yml` and `grab-thumbs.sh`, and `EXPECTED` in `check-tunnel.sh` repopulated (it is deliberately empty — a populated list bounced the mediamtx container every 5 minutes against absent cameras).
+> Status 2026-09-12: cam3 and cam4 are on `192.168.18.x` and streaming (`ready=true`). cam5 is on `192.168.18.x` but was `ready=false`. cam1/cam2 (NVR) and rosie still point at `192.168.1.x` and are unreachable. `EXPECTED` in `check-tunnel.sh` is deliberately empty — a populated list bounced the mediamtx container every 5 minutes against absent cameras. Check live state with `curl -s localhost:9997/v3/paths/list` on the Pi.
 
-| Path | Source | Codec | Notes |
-|------|--------|-------|-------|
-| cam1 | rtsp://192.168.1.230 channel 1 | H265 | NVR |
-| cam2 | rtsp://192.168.1.230 channel 2 | H265 | NVR |
-| cam3 | rtsp://192.168.1.147/stream2 | H264 | Tapo C520WS PTZ |
+| Path | Source | Codec | PTZ container | Notes |
+|------|--------|-------|---------------|-------|
+| cam1 | rtsp://192.168.1.230 channel 1 | H265 | — | NVR (offline) |
+| cam2 | rtsp://192.168.1.230 channel 2 | H265 | — | NVR (offline) |
+| cam3 | rtsp://192.168.18.61/stream2 | H264 | `tapo-ptz` | Tapo C520WS "Old Parlour" — `www/tapo.html` |
+| cam4 | rtsp://192.168.18.59/stream2 | H264 | `tapo-ptz2` | Tapo "The Back" |
+| cam5 | rtsp://192.168.18.56/stream2 | H264 | `tapo-ptz4` | Tapo — `www/cam5.html` |
+| rosie | rtsp://192.168.1.125/stream2 | H264 | `tapo-ptz3` | Tapo "Hayshed" — `www/rosie.html` (offline) |
+
+Cameras behind the TP-Link extender have shown 35–45% loss on 1400-byte packets — test with `ping -s 1400 <cam-ip>` from the Pi before blaming mediamtx.
 
 All use `rtspTransport: tcp` — UDP caused FU-A packet errors causing frame drops.
 
@@ -96,12 +102,9 @@ To add a new camera:
 
 - **WHEP endpoint**: `/whep/{cam}/whep` → mediamtx :8889
 - **HLS endpoint**: `/hls/{cam}/index.m3u8` → mediamtx :8888
-- **ICE**: Uses STUN + TURN. With a public IP the Pi advertises a directly-reachable host candidate via `webrtcAdditionalHosts: [<your-domain>]` in `mediamtx.yml` — a hostname rather than a literal IP so it follows DuckDNS when the WAN IP rotates. Direct beats relay; TURN is now only a fallback for symmetric-NAT clients.
-- **TURN server**: `turn:<your-domain>:3478` — coturn **moved from the VPS to the Pi** (`coturn.conf`, docker-compose service `coturn`, `network_mode: host`). Credentials unchanged, in `www/*.html` and `mediamtx.yml`.
-- coturn pins `listening-ip`/`relay-ip` to the LAN IP. Without that, host networking makes it auto-discover and listen on every docker bridge (172.x) and tailscale0 — useless as relay addresses.
-- On the VPS an open relay only exposed the VPS. On the Pi it would expose the home LAN, so `coturn.conf` denies RFC1918 ranges and allow-lists only the Pi itself.
-- Verify coturn with a STUN binding request to `192.168.18.35:3478` — a `0x0101` success response with a matching transaction ID confirms it end-to-end. Port 3478 is not yet forwarded on the router, so it is LAN-only until the cameras return.
-- **iOS**: Goes through TURN relay. tapo.html uses HLS on iOS (WebRTC doesn't render through TURN relay on iOS). cam1/cam2 fall back to HLS naturally (H265 WebRTC unreliable on iOS).
+- **ICE**: **No STUN, no TURN.** Every player page sets `iceServers: []`. mediamtx advertises directly-reachable host candidates via `webrtcAdditionalHosts: [<your-domain>, 192.168.18.35]` in `mediamtx.yml` — the DuckDNS hostname for internet clients (follows the WAN IP if it changes) and the LAN IP so local clients connect without a NAT hairpin. Because the Pi side is public, the browser's NAT type is irrelevant: its check reaches the Pi, the Pi answers to the source address (peer-reflexive), done. Media then flows browser ↔ `:8189/udp` (or `:8890/tcp` where UDP is blocked) and never touches Caddy or oauth2-proxy — only the WHEP signalling POST does.
+- **Verify a session is direct**: `chrome://webrtc-internals` → selected candidate pair should be `host`/`prflx`/`srflx`, never `relay`.
+- **iOS**: tapo.html still uses HLS on iOS. That rule dates from the TURN era (WebRTC didn't render through the relay on iOS); with the direct path it is untested — worth retrying WebRTC on iOS for the H264 Tapo cams. cam1/cam2 fall back to HLS naturally (H265 WebRTC unreliable on iOS).
 - **Stall detection**: All camera pages use `keepLive()` — detects if `currentTime` freezes for 3s or lags >4s behind wall clock, then reconnects WebRTC.
 
 ## Auth
@@ -121,10 +124,10 @@ To add a new camera:
 |------|-------|---------|-----------|
 | 80 | TCP | HTTP→HTTPS redirect, ACME HTTP-01 | ✅ |
 | 443 | TCP | HTTPS, ACME TLS-ALPN-01 | ✅ |
-| 8189 | UDP | mediamtx WebRTC | ❌ pending cameras |
-| 8890 | TCP | mediamtx WebRTC TCP fallback | ❌ pending cameras |
-| 3478 | TCP+UDP | coturn | ❌ pending cameras |
-| 49160–49200 | UDP | coturn relay range | ❌ pending cameras |
+| 8189 | UDP | mediamtx WebRTC media | ⏳ user adding 2026-09-12 |
+| 8890 | TCP | mediamtx WebRTC TCP fallback (UDP-blocked networks) | ⏳ user adding 2026-09-12 |
+
+That is the complete list — four rules. coturn is gone, so 3478 and 49160–49200 must **not** be forwarded. Until 8189 is forwarded, WebRTC fails from the internet; LAN clients still connect via the `192.168.18.35` candidate, and HLS works from anywhere because it rides the HTTPS chain.
 
 Router quirks: the ONT truncates names in the mapping list, and `Port Trigger Configuration` is a *different, wrong* page (triggering only opens ports temporarily after outbound traffic). NAT hairpin works, so testing the public IP from inside the LAN is valid.
 
@@ -134,7 +137,7 @@ Router quirks: the ONT truncates names in the mapping list, and `Port Trigger Co
 
 Tapo C520WS PTZ is controlled via ONVIF through the `tapo-ptz` container (Node.js service on port 3001).
 
-- Camera IP: `192.168.1.147:2020`
+- One container per camera, ONVIF on port 2020: `tapo-ptz` → `192.168.18.61` (cam3), `tapo-ptz2` → `192.168.18.59` (cam4), `tapo-ptz3` → `192.168.1.125` (rosie), `tapo-ptz4` → `192.168.18.56` (cam5). Caddy routes `/tapo-ptzN*` → `tapo-ptzN:3001`.
 - Preset race condition fix: always `await ptz(0,0,0)` before `absoluteMove` in `gotoPreset`
 - Touch/mouseup stop skips when target is a preset button (`.preset-btn`, `.preset-save`)
 
@@ -142,7 +145,7 @@ Tapo C520WS PTZ is controlled via ONVIF through the `tapo-ptz` container (Node.j
 
 Configured via Netplan (`/etc/netplan/50-wifi.yaml`). Networks and credentials are in `playbook.yml` and `setup.md`. Current network: `McAweeneys` on `192.168.18.0/24`.
 
-Power save is disabled by the `wifi-powersave-off` systemd unit (see `playbook.yml`) — it caused multi-second RTTs. The link is still weak regardless.
+Power save is disabled by the `wifi-powersave-off` systemd unit (see `playbook.yml`) — it caused multi-second RTTs. With that fixed the link is strong (`-35 dBm`, 433 Mbit/s, 0% loss, 2026-09-12); do not treat Pi WiFi as the bottleneck. Check with `iw dev wlan0 link` and `ping -c 10 -s 1400 192.168.18.1`.
 
 **Changing WiFi with the Pi offline:** macOS cannot mount the ext4 rootfs, so `/etc/netplan/50-wifi.yaml` is unreachable from a Mac. Go through cloud-init on the FAT32 `system-boot` partition instead: edit `network-config`, add a `write_files` + `runcmd` block to `user-data` (needed because Ansible's `50-wifi.yaml` sorts after `50-cloud-init.yaml` and wins the netplan merge), and **bump `instance-id` in `meta-data`** — without that, cloud-init treats network config as already-applied and silently ignores the edit.
 
@@ -162,7 +165,6 @@ ssh rpi 'getent hosts acme-v02.api.letsencrypt.org; resolvectl status | grep "Cu
 |------|---------|
 | `docker-compose.yml` | All Docker services |
 | `Caddyfile` | Public TLS vhosts + internal backend (:8081) |
-| `coturn.conf` | TURN server config (moved off the VPS) |
 | `duck.sh` | DuckDNS updater — deployed to `/home/admin/duckdns/duck.sh` |
 | `check-tunnel.sh` | Health checks — deployed to `/usr/local/bin/` |
 | `mediamtx.yml` | RTSP→WebRTC/HLS bridge config |

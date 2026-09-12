@@ -32,14 +32,9 @@
     const status = document.getElementById('status');
     const container = document.getElementById('container');
 
-    const ICE_SERVERS = [
-      { urls: 'stun:${COOKIE_DOMAIN}:3478' },
-      {
-        urls: ['turn:${COOKIE_DOMAIN}:3478', 'turn:${COOKIE_DOMAIN}:3478?transport=tcp'],
-        username: '${TURN_USERNAME}',
-        credential: '${TURN_PASSWORD}'
-      }
-    ];
+    // No STUN/TURN: the Pi has a public IP and mediamtx advertises it as a host
+    // candidate (webrtcAdditionalHosts), so ICE completes direct without a relay.
+    const ICE_SERVERS = [];
 
     async function start() {
       try {

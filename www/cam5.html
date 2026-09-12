@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>TAPO C520WS</title>
+  <title>Dry Cows</title>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -34,7 +34,6 @@
     .preset-btn:active { background: #0a84ff; }
     .preset-save { padding: 10px 16px; background: #30d158; border: none; border-radius: 10px; color: #fff; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
 
-    /* Fullscreen overlay styles */
     #container:fullscreen,
     #container:-webkit-full-screen {
       width: 100vw; height: 100vh; max-width: none; background: #000;
@@ -59,7 +58,7 @@
   </style>
 </head>
 <body>
-  <h1>TAPO C520WS</h1>
+  <h1>Dry Cows</h1>
   <a href="/cameras/" style="font-size:1.1rem;font-weight:600;text-decoration:none;color:#fff;background:#ff453a;padding:14px 24px;border-radius:12px;align-self:stretch;text-align:center">← Cameras</a>
 
   <div id="container">
@@ -76,7 +75,7 @@
         <button data-x="0"     data-y="-1.0" data-z="0">▼</button>
         <div class="empty"></div>
       </div>
-<div class="audio">
+      <div class="audio">
         <button id="muteBtn" class="active" onclick="toggleMute()">🔇</button>
         <label>Audio</label>
       </div>
@@ -97,21 +96,37 @@
     // candidate (webrtcAdditionalHosts), so ICE completes direct without a relay.
     const ICE_SERVERS = [];
 
+    let pc = null;
+
     async function startStream() {
       try {
-        const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+        pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
         pc.addTransceiver('video', { direction: 'recvonly' });
         pc.addTransceiver('audio', { direction: 'recvonly' });
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
+        // Send the offer once candidates stop arriving (host candidates land in
+        // ~50ms) rather than waiting on iceGatheringState === 'complete', which
+        // some browsers are slow to reach. Hard cap so a stuck gather can't hang.
         await new Promise(resolve => {
           if (pc.iceGatheringState === 'complete') { resolve(); return; }
-          const t = setTimeout(resolve, 8000);
-          pc.addEventListener('icegatheringstatechange', function h() {
-            if (pc.iceGatheringState === 'complete') { clearTimeout(t); pc.removeEventListener('icegatheringstatechange', h); resolve(); }
-          });
+          let quiet, done = false;
+          const finish = () => {
+            if (done) return;
+            done = true;
+            clearTimeout(quiet); clearTimeout(cap);
+            pc.removeEventListener('icecandidate', arm);
+            pc.removeEventListener('icegatheringstatechange', onState);
+            resolve();
+          };
+          const arm = () => { clearTimeout(quiet); quiet = setTimeout(finish, 800); };
+          const onState = () => { if (pc.iceGatheringState === 'complete') finish(); };
+          const cap = setTimeout(finish, 3000);
+          pc.addEventListener('icecandidate', arm);
+          pc.addEventListener('icegatheringstatechange', onState);
+          arm();
         });
-        const res = await fetch(`/whep/cam3/whep`, {
+        const res = await fetch(`/whep/cam5/whep`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/sdp' },
           body: pc.localDescription.sdp
@@ -123,25 +138,47 @@
             if (e.streams[0] && video.srcObject !== e.streams[0]) {
               video.srcObject = e.streams[0];
               video.play().catch(() => {});
-              status.textContent = 'Stream connected'; resolve(); keepLive(() => { pc.close(); video.srcObject = null; startStream(); });
             }
           };
+          // ontrack fires the moment the answer is applied — long before ICE has
+          // a working pair. Treating it as success meant the page said "Stream
+          // connected" over a permanently black video and never fell back to
+          // HLS, because the promise had already resolved. Wait for decoded
+          // media instead: readyState >= 2 means frames actually arrived.
+          const ready = () => {
+            status.textContent = 'Stream connected';
+            resolve();
+            keepLive(() => { pc.close(); video.srcObject = null; startStream(); });
+          };
+          if (video.readyState >= 2) ready();
+          else video.addEventListener('loadeddata', ready, { once: true });
           pc.oniceconnectionstatechange = () => {
             if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
-              pc.close(); reject(new Error('ICE ' + pc.iceConnectionState));
+              reject(new Error('ICE ' + pc.iceConnectionState));
             }
           };
         });
         await pc.setRemoteDescription({ type: 'answer', sdp: await res.text() });
-        await connected;
+        // Off-LAN there is currently no viable candidate pair (8189/udp and
+        // 8890/tcp are not forwarded), and the browser takes ~30s to give up
+        // and report 'failed'. Don't sit through that — if media hasn't
+        // arrived in 6s, cut to HLS, which is the path that works today.
+        await Promise.race([
+          connected,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('WebRTC connect timeout')), 6000))
+        ]);
       } catch (e) {
+        // ontrack may already have parked a dead MediaStream on the element;
+        // clear it or hls.js has nothing to attach to.
+        if (pc) { pc.close(); pc = null; }
+        video.srcObject = null;
         status.textContent = 'Falling back to HLS...';
         fallbackHLS();
       }
     }
 
     function fallbackHLS() {
-      const hlsUrl = `/hls/cam3/index.m3u8`;
+      const hlsUrl = `/hls/cam5/index.m3u8`;
       if (typeof Hls !== 'undefined' && Hls.isSupported()) {
         const hls = new Hls({ lowLatencyMode: true });
         hls.loadSource(hlsUrl);
@@ -154,18 +191,22 @@
       }
     }
 
+    let liveTimer = null;
     function keepLive(reconnect) {
       let lastTime = -1, stalledFor = 0, startWall = null, startVideo = null;
-      setInterval(() => {
+      // Every reconnect calls back in here, so drop the previous watchdog —
+      // otherwise the intervals stack and each one fires its own reconnect.
+      clearInterval(liveTimer);
+      liveTimer = setInterval(() => {
         if (video.paused || video.readyState < 2) return;
         if (video.currentTime === lastTime) {
           stalledFor += 500;
-          if (stalledFor >= 3000) { stalledFor = 0; startWall = null; reconnect(); }
+          if (stalledFor >= 6000) { stalledFor = 0; startWall = null; reconnect(); }
         } else {
           stalledFor = 0;
           if (startWall === null) { startWall = Date.now(); startVideo = video.currentTime; }
           const lag = ((Date.now() - startWall) / 1000) - (video.currentTime - startVideo);
-          if (lag > 4) { startWall = null; reconnect(); }
+          if (lag > 8) { startWall = null; reconnect(); }
           lastTime = video.currentTime;
         }
       }, 500);
@@ -175,6 +216,11 @@
     if (isIOS) {
       fallbackHLS();
     } else {
+      // mediamtx builds the HLS muxer on demand: the first manifest request on a
+      // cold path takes ~4.4s, warm ones ~1ms. Warm it alongside the WebRTC
+      // attempt so that if we do fall back, HLS starts straight away instead of
+      // paying that cost only after the WebRTC timeout has already run out.
+      fetch(`/hls/cam5/index.m3u8`, { cache: 'no-store' }).catch(() => {});
       startStream();
     }
 
@@ -196,7 +242,7 @@
         document.querySelectorAll('.dpad button, .zoom button').forEach(b => b.classList.remove('pressed'));
         await ptz(0, 0, 0);
         status.textContent = 'Moving to preset...';
-        const res = await fetch('/tapo-ptz/preset/go', {
+        const res = await fetch('/tapo-ptz4/preset/go', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name })
         });
@@ -208,7 +254,7 @@
     }
 
     async function savePreset(name) {
-      const res = await fetch('/tapo-ptz/preset/save', {
+      const res = await fetch('/tapo-ptz4/preset/save', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name })
       });
@@ -226,7 +272,7 @@
 
     async function ptz(x, y, zoom) {
       try {
-        const res = await fetch('/tapo-ptz/ptz', {
+        const res = await fetch('/tapo-ptz4/ptz', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ x, y, zoom, clientId })

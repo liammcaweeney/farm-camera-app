@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>TAPO C520WS</title>
+  <title>Rosie Cam</title>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -34,7 +34,6 @@
     .preset-btn:active { background: #0a84ff; }
     .preset-save { padding: 10px 16px; background: #30d158; border: none; border-radius: 10px; color: #fff; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
 
-    /* Fullscreen overlay styles */
     #container:fullscreen,
     #container:-webkit-full-screen {
       width: 100vw; height: 100vh; max-width: none; background: #000;
@@ -59,7 +58,7 @@
   </style>
 </head>
 <body>
-  <h1>TAPO C520WS</h1>
+  <h1>Rosie Cam</h1>
   <a href="/cameras/" style="font-size:1.1rem;font-weight:600;text-decoration:none;color:#fff;background:#ff453a;padding:14px 24px;border-radius:12px;align-self:stretch;text-align:center">← Cameras</a>
 
   <div id="container">
@@ -76,7 +75,7 @@
         <button data-x="0"     data-y="-1.0" data-z="0">▼</button>
         <div class="empty"></div>
       </div>
-<div class="audio">
+      <div class="audio">
         <button id="muteBtn" class="active" onclick="toggleMute()">🔇</button>
         <label>Audio</label>
       </div>
@@ -111,7 +110,7 @@
             if (pc.iceGatheringState === 'complete') { clearTimeout(t); pc.removeEventListener('icegatheringstatechange', h); resolve(); }
           });
         });
-        const res = await fetch(`/whep/cam3/whep`, {
+        const res = await fetch(`/whep/rosie/whep`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/sdp' },
           body: pc.localDescription.sdp
@@ -141,7 +140,7 @@
     }
 
     function fallbackHLS() {
-      const hlsUrl = `/hls/cam3/index.m3u8`;
+      const hlsUrl = `/hls/rosie/index.m3u8`;
       if (typeof Hls !== 'undefined' && Hls.isSupported()) {
         const hls = new Hls({ lowLatencyMode: true });
         hls.loadSource(hlsUrl);
@@ -160,12 +159,12 @@
         if (video.paused || video.readyState < 2) return;
         if (video.currentTime === lastTime) {
           stalledFor += 500;
-          if (stalledFor >= 3000) { stalledFor = 0; startWall = null; reconnect(); }
+          if (stalledFor >= 6000) { stalledFor = 0; startWall = null; reconnect(); }
         } else {
           stalledFor = 0;
           if (startWall === null) { startWall = Date.now(); startVideo = video.currentTime; }
           const lag = ((Date.now() - startWall) / 1000) - (video.currentTime - startVideo);
-          if (lag > 4) { startWall = null; reconnect(); }
+          if (lag > 8) { startWall = null; reconnect(); }
           lastTime = video.currentTime;
         }
       }, 500);
@@ -196,7 +195,7 @@
         document.querySelectorAll('.dpad button, .zoom button').forEach(b => b.classList.remove('pressed'));
         await ptz(0, 0, 0);
         status.textContent = 'Moving to preset...';
-        const res = await fetch('/tapo-ptz/preset/go', {
+        const res = await fetch('/tapo-ptz3/preset/go', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name })
         });
@@ -208,7 +207,7 @@
     }
 
     async function savePreset(name) {
-      const res = await fetch('/tapo-ptz/preset/save', {
+      const res = await fetch('/tapo-ptz3/preset/save', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name })
       });
@@ -226,7 +225,7 @@
 
     async function ptz(x, y, zoom) {
       try {
-        const res = await fetch('/tapo-ptz/ptz', {
+        const res = await fetch('/tapo-ptz3/ptz', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ x, y, zoom, clientId })
