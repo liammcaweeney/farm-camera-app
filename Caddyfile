@@ -1,15 +1,19 @@
-# Public entry point — oauth2-proxy handles auth and redirects
-:80 {
+# Public entry point — Caddy terminates TLS here now (Let's Encrypt).
+# Previously the Oracle VPS did TLS and forwarded over the reverse SSH tunnel;
+# the VPS is gone, so traffic arrives straight from the internet via router
+# port-forward 80/443 -> this Pi.
+killywilly.duckdns.org {
     handle /api/wedding-rsvp {
-        @denied not remote_ip 172.16.0.0/12
-        respond @denied "Forbidden" 403
         uri replace /api/wedding-rsvp /rsvp
         reverse_proxy host.docker.internal:3000
     }
 
-    reverse_proxy oauth2-proxy:4180 {
-        header_up X-Forwarded-Proto https
-    }
+    reverse_proxy oauth2-proxy:4180
+}
+
+# Wedding subdomain — moved off the VPS Caddyfile, same 301 as before
+wedding.killywilly.duckdns.org {
+    redir https://www.liamandaineswedding.com{uri} 301
 }
 
 # Internal backend — only reachable via oauth2-proxy
