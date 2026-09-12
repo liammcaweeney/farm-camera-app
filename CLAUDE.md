@@ -105,6 +105,7 @@ To add a new camera:
 - On the VPS an open relay only exposed the VPS. On the Pi it would expose the home LAN, so `coturn.conf` denies RFC1918 ranges and allow-lists only the Pi itself.
 - Verify coturn with a STUN binding request to `192.168.18.35:3478` — a `0x0101` success response with a matching transaction ID confirms it end-to-end. Port 3478 is not yet forwarded on the router, so it is LAN-only until the cameras return.
 - **iOS**: Goes through TURN relay. tapo.html uses HLS on iOS (WebRTC doesn't render through TURN relay on iOS). cam1/cam2 fall back to HLS naturally (H265 WebRTC unreliable on iOS).
+- **"Falling back to HLS..." + black screen on both Tapo cams (2026-09-12)**: root cause was the TP-Link WiFi extender the cameras hang off (`192.168.18.41`/`.44`, all clients behind it share ARP MAC `e6:67:1e:74:da:e5`). Small pings looked fine (~6% loss) but video-sized frames dropped ~35–45%: `ping -s 1400 -i 0.03 -w 30 -q 192.168.18.41` from the Pi (0% to the gateway as control). Cameras' RTSP TCP streams stalled 8–10s at a time → mediamtx `[RTSP source] TCP timeout` → WebRTC sessions `terminated`, HLS `segment duration changed … 18s` → black. Not a config problem; fix is the extender (reboot / reposition / 5 GHz backhaul). Quick stall check with no viewers: sample `curl localhost:9997/v3/paths/get/cam3 | jq .bytesReceived` once a second — it must climb every second.
 - **Stall detection**: All camera pages use `keepLive()` — detects if `currentTime` freezes for 3s or lags >4s behind wall clock, then reconnects WebRTC.
 
 ## Auth
