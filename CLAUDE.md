@@ -75,15 +75,17 @@ This was only possible because the home connection has a real routable IP (`193.
 
 ## Cameras
 
-> Status 2026-09-12: cam3 and cam4 are on `192.168.18.x` and streaming (`ready=true`). cam5 is on `192.168.18.x` but was `ready=false`. cam1/cam2 (NVR) and rosie still point at `192.168.1.x` and are unreachable. `EXPECTED` in `check-tunnel.sh` is deliberately empty — a populated list bounced the mediamtx container every 5 minutes against absent cameras. Check live state with `curl -s localhost:9997/v3/paths/list` on the Pi.
+> Status 2026-09-26: cam4 ("The Back") streams on `192.168.18.59` (`ready=true`). cam5 ("Dry Cows") was found at `192.168.18.60` after a factory reset — its config had the wrong user *and* IP (`camera@.56`); correct is `drycows@.60`. cam3 (`.61`) is absent from the LAN entirely: a full `192.168.18.0/24` sweep found only `.59` and `.60` with port 554 open. cam1/cam2 (NVR) and rosie still point at `192.168.1.x` and are unreachable.
+>
+> Camera IPs drift because the Tapo cams sit behind a TP-Link extender that proxy-ARPs every client under one MAC (`e6:67:1e:74:95:ad`), so router DHCP reservations keyed on the camera's real MAC may never match. Real MACs, read over ONVIF `GetNetworkInterfaces`: cam4 `0C:EF:15:DE:DC:9B`, cam5 `0C:EF:15:DE:DD:E0` (both Tapo C520WS). When a cam goes missing, sweep for open 554 rather than assuming its old IP. `EXPECTED` in `check-tunnel.sh` is deliberately empty — a populated list bounced the mediamtx container every 5 minutes against absent cameras. Check live state with `curl -s localhost:9997/v3/paths/list` on the Pi.
 
 | Path | Source | Codec | PTZ container | Notes |
 |------|--------|-------|---------------|-------|
 | cam1 | rtsp://192.168.1.230 channel 1 | H265 | — | NVR (offline) |
 | cam2 | rtsp://192.168.1.230 channel 2 | H265 | — | NVR (offline) |
 | cam3 | rtsp://192.168.18.61/stream2 | H264 | `tapo-ptz` | Tapo C520WS "Old Parlour" — `www/tapo.html` |
-| cam4 | rtsp://192.168.18.59/stream2 | H264 | `tapo-ptz2` | Tapo "The Back" |
-| cam5 | rtsp://192.168.18.56/stream2 | H264 | `tapo-ptz4` | Tapo — `www/cam5.html` |
+| cam4 | rtsp://192.168.18.59/stream2 | H264 | `tapo-ptz2` | Tapo "The Back" — user `theback` |
+| cam5 | rtsp://192.168.18.60/stream2 | H264 | `tapo-ptz4` | Tapo "Dry Cows" — user `drycows`, `www/cam5.html` |
 | rosie | rtsp://192.168.1.125/stream2 | H264 | `tapo-ptz3` | Tapo "Hayshed" — `www/rosie.html` (offline) |
 
 Cameras behind the TP-Link extender have shown 35–45% loss on 1400-byte packets — test with `ping -s 1400 <cam-ip>` from the Pi before blaming mediamtx.
@@ -137,7 +139,7 @@ Router quirks: the ONT truncates names in the mapping list, and `Port Trigger Co
 
 Tapo C520WS PTZ is controlled via ONVIF through the `tapo-ptz` container (Node.js service on port 3001).
 
-- One container per camera, ONVIF on port 2020: `tapo-ptz` → `192.168.18.61` (cam3), `tapo-ptz2` → `192.168.18.59` (cam4), `tapo-ptz3` → `192.168.1.125` (rosie), `tapo-ptz4` → `192.168.18.56` (cam5). Caddy routes `/tapo-ptzN*` → `tapo-ptzN:3001`.
+- One container per camera, ONVIF on port 2020: `tapo-ptz` → `192.168.18.61` (cam3), `tapo-ptz2` → `192.168.18.59` (cam4), `tapo-ptz3` → `192.168.1.125` (rosie), `tapo-ptz4` → `192.168.18.60` (cam5). Caddy routes `/tapo-ptzN*` → `tapo-ptzN:3001`.
 - Preset race condition fix: always `await ptz(0,0,0)` before `absoluteMove` in `gotoPreset`
 - Touch/mouseup stop skips when target is a preset button (`.preset-btn`, `.preset-save`)
 
