@@ -31,6 +31,11 @@ scp docker-compose.yml Caddyfile rpi-ts:/home/admin/rpi/
 ssh rpi-ts "cd /home/admin/rpi && sudo docker compose up -d <service>"
 ```
 
+Two cases where `up -d` silently does nothing:
+
+- **`tapo-ptz/` code** is baked into the image, so `up -d` keeps running the old build. Rebuild all four: `sudo docker compose up -d --build tapo-ptz tapo-ptz2 tapo-ptz3 tapo-ptz4`. A retry fix sat on the Pi from 2026-09-05 to 2026-10-02 unbuilt (image dated 2026-04-02) for exactly this reason. Confirm with `docker logs`: the current code logs `ONVIF connect failed (attempt N)`.
+- **`mediamtx.yml`** is bind-mounted, so compose sees no change. Use `sudo docker compose restart mediamtx`.
+
 For www files (HTML, etc.) only — no restart needed, just scp:
 ```bash
 scp www/<file> rpi-ts:/home/admin/rpi/www/
@@ -140,6 +145,7 @@ Router quirks: the ONT truncates names in the mapping list, and `Port Trigger Co
 Tapo C520WS PTZ is controlled via ONVIF through the `tapo-ptz` container (Node.js service on port 3001).
 
 - One container per camera, ONVIF on port 2020: `tapo-ptz` → `192.168.18.61` (cam3), `tapo-ptz2` → `192.168.18.59` (cam4), `tapo-ptz3` → `192.168.1.125` (rosie), `tapo-ptz4` → `192.168.18.60` (cam5). Caddy routes `/tapo-ptzN*` → `tapo-ptzN:3001`.
+- **Controls dead but video fine** = the PTZ container lost ONVIF, not the camera. `server.js` retries the ONVIF handshake with backoff (2s, 4s, … capped at 30s) until it succeeds; the original one-shot connect left `cam = null` and every call returned 503 until a manual restart, which hit after every Pi reboot (`ENETUNREACH` before WiFi is up) or camera outage. Check with `docker logs rpi-tapo-ptzN-1`.
 - Preset race condition fix: always `await ptz(0,0,0)` before `absoluteMove` in `gotoPreset`
 - Touch/mouseup stop skips when target is a preset button (`.preset-btn`, `.preset-save`)
 

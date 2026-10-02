@@ -10,15 +10,30 @@ const CAMERA_PASS = decodeURIComponent(process.env.TAPO_PASS || '');
 const PTZ_ABSOLUTE = process.env.TAPO_PTZ_ABSOLUTE === '1';
 
 let cam = null;
-cam = new Cam({
-  hostname: CAMERA_IP,
-  username: CAMERA_USER,
-  password: CAMERA_PASS,
-  port: 2020
-}, function(err) {
-  if (err) { cam = null; return console.error('ONVIF connect failed:', err.message); }
-  console.log('ONVIF connected');
-});
+
+// Cameras on the wireless bridge often don't answer ONVIF for the first few
+// seconds after this container starts, so a single attempt loses the PTZ until
+// something restarts it. Retry with backoff, and only publish `cam` once the
+// handshake has actually succeeded — a failed Cam is half-initialised and
+// throws on use rather than reporting "not connected".
+function connectOnvif(attempt = 1) {
+  const pending = new Cam({
+    hostname: CAMERA_IP,
+    username: CAMERA_USER,
+    password: CAMERA_PASS,
+    port: 2020
+  }, function(err) {
+    if (err) {
+      cam = null;
+      const delay = Math.min(30000, 2000 * attempt);
+      console.error(`ONVIF connect failed (attempt ${attempt}):`, err.message, `- retrying in ${delay / 1000}s`);
+      return setTimeout(() => connectOnvif(attempt + 1), delay);
+    }
+    cam = pending;
+    console.log('ONVIF connected');
+  });
+}
+connectOnvif();
 
 app.get('/tapo-ptz/capabilities', (req, res) => {
   if (!cam) return res.status(503).json({ error: 'ONVIF not connected' });
