@@ -84,16 +84,20 @@ This was only possible because the home connection has a real routable IP (`193.
 >
 > Cams joined to the router's own WiFi (e.g. cam5 on `SSID5`) show their real MAC in the router's *User Device Information* list, so DHCP reservations on it work. Clients behind the outdoor TP-Link EAP225 APs (router `LAN2`) can appear under a proxy MAC (`e6:67:1e:74:95:ad`) instead. The router list also shows Online/Offline per device: check it first when a cam vanishes. Real MACs, read over ONVIF `GetNetworkInterfaces`: cam4 `0C:EF:15:DE:DC:9B`, cam5 `0C:EF:15:DE:DD:E0` (both Tapo C520WS). When a cam goes missing, sweep for open 554 rather than assuming its old IP. `EXPECTED` in `check-tunnel.sh` is deliberately empty — a populated list bounced the mediamtx container every 5 minutes against absent cameras. Check live state with `curl -s localhost:9997/v3/paths/list` on the Pi.
 
+**Wireless bridge (mapped 2026-10-03).** A Tenbay point-to-point bridge links the house LAN to the yard: `.45` is the house-side radio, `.39` ("BRAP") the far-side radio. Both answer telnet/HTTP and relay DNS, but neither routes: there is no second router and no second subnet, and the only DHCP server is `192.168.18.1`. The far radio MAC-NATs everything behind it, so all yard devices appear under one proxy MAC, `e6:67:1e:74:95:ad`. Behind it: `.41` EAP225-Outdoor AP, `.44` EAP225 AP, `.42` TP-Link ES205GP switch, `.66` `lwip` (unidentified embedded device), and the cams on that side (cam4 `.59`, cam5 `.72`).
+
+**DHCP reservations still work behind the bridge:** cam4 holds its router reservation on `.59` while yard-side, so the client's real MAC evidently survives in the DHCP request even though ARP shows the proxy MAC. Reserve each cam's real MAC (read it over ONVIF `GetNetworkInterfaces`) to stop IPs drifting. cam5 came up on `.72` after moving to the outdoor AP, most likely because no reservation existed for it.
+
 | Path | Source | Codec | PTZ container | Notes |
 |------|--------|-------|---------------|-------|
 | cam1 | rtsp://192.168.1.230 channel 1 | H265 | — | NVR (offline) |
 | cam2 | rtsp://192.168.1.230 channel 2 | H265 | — | NVR (offline) |
 | cam3 | rtsp://192.168.18.61/stream2 | H264 | `tapo-ptz` | Tapo C520WS "Old Parlour" — `www/tapo.html` |
 | cam4 | rtsp://192.168.18.59/stream2 | H264 | `tapo-ptz2` | Tapo "The Back" — user `theback` |
-| cam5 | rtsp://192.168.18.60/stream2 | H264 | `tapo-ptz4` | Tapo "Dry Cows" — user `drycows`, `www/cam5.html` |
+| cam5 | rtsp://192.168.18.72/stream2 | H264 | `tapo-ptz4` | Tapo "Dry Cows" — user `drycows`, `www/cam5.html` |
 | rosie | rtsp://192.168.1.125/stream2 | H264 | `tapo-ptz3` | Tapo "Hayshed" — `www/rosie.html` (offline) |
 
-Cameras behind the TP-Link extender have shown 35–45% loss on 1400-byte packets — test with `ping -s 1400 <cam-ip>` from the Pi before blaming mediamtx.
+Cameras behind the wireless bridge have shown 35–45% loss on 1400-byte packets — test with `ping -s 1400 <cam-ip>` from the Pi before blaming mediamtx.
 
 All use `rtspTransport: tcp` — UDP caused FU-A packet errors causing frame drops.
 
@@ -144,7 +148,7 @@ Router quirks: the ONT truncates names in the mapping list, and `Port Trigger Co
 
 Tapo C520WS PTZ is controlled via ONVIF through the `tapo-ptz` container (Node.js service on port 3001).
 
-- One container per camera, ONVIF on port 2020: `tapo-ptz` → `192.168.18.61` (cam3), `tapo-ptz2` → `192.168.18.59` (cam4), `tapo-ptz3` → `192.168.1.125` (rosie), `tapo-ptz4` → `192.168.18.60` (cam5). Caddy routes `/tapo-ptzN*` → `tapo-ptzN:3001`.
+- One container per camera, ONVIF on port 2020: `tapo-ptz` → `192.168.18.61` (cam3), `tapo-ptz2` → `192.168.18.59` (cam4), `tapo-ptz3` → `192.168.1.125` (rosie), `tapo-ptz4` → `192.168.18.72` (cam5). Caddy routes `/tapo-ptzN*` → `tapo-ptzN:3001`.
 - **Controls dead but video fine** = the PTZ container lost ONVIF, not the camera. `server.js` retries the ONVIF handshake with backoff (2s, 4s, … capped at 30s) until it succeeds; the original one-shot connect left `cam = null` and every call returned 503 until a manual restart, which hit after every Pi reboot (`ENETUNREACH` before WiFi is up) or camera outage. Check with `docker logs rpi-tapo-ptzN-1`.
 - Preset race condition fix: always `await ptz(0,0,0)` before `absoluteMove` in `gotoPreset`
 - Touch/mouseup stop skips when target is a preset button (`.preset-btn`, `.preset-save`)
