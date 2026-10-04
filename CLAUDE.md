@@ -80,7 +80,7 @@ This was only possible because the home connection has a real routable IP (`193.
 
 ## Cameras
 
-> Status 2026-09-26: cam4 ("The Back") streams on `192.168.18.59` (`ready=true`). cam5 ("Dry Cows") was found at `192.168.18.60` after a factory reset — its config had the wrong user *and* IP (`camera@.56`); correct is `drycows@.60`. cam3 (`.61`) is absent from the LAN entirely: a full `192.168.18.0/24` sweep found only `.59` and `.60` with port 554 open. cam1/cam2 (NVR) and rosie still point at `192.168.1.x` and are unreachable.
+> Status 2026-09-26: cam4 ("The Back") streams on `192.168.18.59` (`ready=true`). cam5 ("Dry Cows") was found at `192.168.18.60` after a factory reset — its config had the wrong user *and* IP (`camera@.56`); correct is `drycows@.60`. cam3 (`.61`) is absent from the LAN entirely: a full `192.168.18.0/24` sweep found only `.59` and `.60` with port 554 open. rosie still points at `192.168.1.125` and is unreachable. cam1/cam2 are live again via the NVR on `192.168.1.101` (see below).
 >
 > Cams joined to the router's own WiFi (e.g. cam5 on `SSID5`) show their real MAC in the router's *User Device Information* list, so DHCP reservations on it work. Clients behind the outdoor TP-Link EAP225 APs (router `LAN2`) can appear under a proxy MAC (`e6:67:1e:74:95:ad`) instead. The router list also shows Online/Offline per device: check it first when a cam vanishes. Real MACs, read over ONVIF `GetNetworkInterfaces`: cam4 `0C:EF:15:DE:DC:9B`, cam5 `0C:EF:15:DE:DD:E0` (both Tapo C520WS). When a cam goes missing, sweep for open 554 rather than assuming its old IP. `EXPECTED` in `check-tunnel.sh` is deliberately empty — a populated list bounced the mediamtx container every 5 minutes against absent cameras. Check live state with `curl -s localhost:9997/v3/paths/list` on the Pi.
 
@@ -90,10 +90,16 @@ This was only possible because the home connection has a real routable IP (`193.
 
 **DHCP reservations still work behind the bridge:** cam4 holds its router reservation on `.59` while yard-side, so the client's real MAC evidently survives in the DHCP request even though ARP shows the proxy MAC. Reserve each cam's real MAC (read it over ONVIF `GetNetworkInterfaces`) to stop IPs drifting. cam5 has a router reservation for `.72` but came back on `.76` on 2026-10-04, so the reservation is not being applied to it. Cause unknown; check which MAC the router lists against the cam's current IP.
 
+**NVR for cam1/cam2 (found 2026-10-04).** Topsvision XMeye box (web server `uc-httpd`, RTSP 554, DVRIP 34567), login `admin` / blank. It sits on a **fixed `192.168.1.101`**, the old Starlink-era subnet: it is absent from the Linksys DHCP table, so the address is set on the NVR itself and does not drift. Channels 1–2 are cam1/cam2 (`hevc 1280x720`); channels 3–4 also return `944x1080` video, probably a no-camera placeholder. The NVR answers DVRIP login with a binary (pre-JSON) reply, so its network settings can't be changed remotely with the usual tools; re-IP it from its own screen/mouse UI if needed.
+
+The Pi reaches it through a **second, permanent address `192.168.1.46/24` on `wlan0`** (netplan `addresses:` alongside `dhcp4`, mirrored in `playbook.yml`; backup at `/etc/netplan/50-wifi.yaml.bak-20261004`). Both subnets share the same wire, so no router is involved. Remove that address only after moving the NVR onto `192.168.18.x`. The Caddy `/nvr/` route also points at `.101`.
+
+To find devices on the old subnet, ARP-probe it from the Pi (sender IP `0.0.0.0`), or read the Linksys DHCP table at `http://192.168.18.3/DHCPTable.htm` (factory login). On 2026-10-04 that table also showed a Tapo (`0c:ef:15:de:dc:ef`) leased `192.168.1.100` with only port 443 open, i.e. RTSP/ONVIF not enabled: probably cam3 or rosie after a reset.
+
 | Path | Source | Codec | PTZ container | Notes |
 |------|--------|-------|---------------|-------|
-| cam1 | rtsp://192.168.1.230 channel 1 | H265 | — | NVR (offline) |
-| cam2 | rtsp://192.168.1.230 channel 2 | H265 | — | NVR (offline) |
+| cam1 | rtsp://192.168.1.101 channel 1 | H265 | — | NVR, 1280x720 |
+| cam2 | rtsp://192.168.1.101 channel 2 | H265 | — | NVR, 1280x720 |
 | cam3 | rtsp://192.168.18.61/stream2 | H264 | `tapo-ptz` | Tapo C520WS "Old Parlour" — `www/tapo.html` |
 | cam4 | rtsp://192.168.18.59/stream2 | H264 | `tapo-ptz2` | Tapo "The Back" — user `theback` |
 | cam5 | rtsp://192.168.18.76/stream2 | H264 | `tapo-ptz4` | Tapo "Dry Cows" — user `drycows`, `www/cam5.html` |

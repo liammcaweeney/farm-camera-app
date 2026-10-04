@@ -38,9 +38,9 @@ wedding.killywilly.duckdns.org {
     redir @nvr_exact /nvr/ 301
 
     handle_path /nvr/* {
-        reverse_proxy 192.168.1.230:80 {
+        reverse_proxy 192.168.1.101:80 {
             header_up Authorization "Basic YWRtaW46YWRtaW4="
-            header_up Host "192.168.1.230"
+            header_up Host "192.168.1.101"
             transport http {
                 versions 1.1
             }
