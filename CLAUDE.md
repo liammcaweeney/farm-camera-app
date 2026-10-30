@@ -80,6 +80,8 @@ This was only possible because the home connection has a real routable IP (`193.
 
 ## Cameras
 
+> **Status 2026-10-30:** cam1, cam2, cam4, cam5 and rosie are live. The NVR moved onto the house LAN at `192.168.18.81` (DHCP; RTSP, DVRIP 34567 and web `/nvr/` all checked there), so cam1/cam2 and the Caddy `/nvr/` route now point at `.81`. The `192.168.1.46` address on `wlan0` is no longer needed for it. cam5 (Dry Cows) came back on `192.168.18.72`, its router reservation, with the `drycows` login. cam3 (Old Parlour) is the Tapo at `192.168.18.80`: it presents a `TPRI-DEVICE` certificate on 443 with RTSP/ONVIF closed, which means its Camera Account is unset (factory reset). mediamtx and `tapo-ptz` already point at `.80`, so it comes up once the account `oldparlour` is re-created in the Tapo app with the same password as in `mediamtx.yml`. `.env` camera vars are stale; the live credentials are in `mediamtx.yml` and `docker-compose.yml`.
+>
 > Status 2026-09-26: cam4 ("The Back") streams on `192.168.18.59` (`ready=true`). cam5 ("Dry Cows") was found at `192.168.18.60` after a factory reset — its config had the wrong user *and* IP (`camera@.56`); correct is `drycows@.60`. cam3 (`.61`) is absent from the LAN entirely: a full `192.168.18.0/24` sweep found only `.59` and `.60` with port 554 open. rosie ("Hayshed") is live on `192.168.18.79` as of 2026-10-04. cam1/cam2 are live again via the NVR on `192.168.1.101` (see below).
 >
 > Cams joined to the router's own WiFi (e.g. cam5 on `SSID5`) show their real MAC in the router's *User Device Information* list, so DHCP reservations on it work. Clients behind the outdoor TP-Link EAP225 APs (router `LAN2`) can appear under a proxy MAC (`e6:67:1e:74:95:ad`) instead. The router list also shows Online/Offline per device: check it first when a cam vanishes. Real MACs, read over ONVIF `GetNetworkInterfaces`: cam4 `0C:EF:15:DE:DC:9B`, cam5 `0C:EF:15:DE:DD:E0`, rosie `0C:EF:15:DE:DC:EF` (all Tapo C520WS). When a cam goes missing, sweep for open 554 rather than assuming its old IP. `EXPECTED` in `check-tunnel.sh` is deliberately empty — a populated list bounced the mediamtx container every 5 minutes against absent cameras. Check live state with `curl -s localhost:9997/v3/paths/list` on the Pi.
@@ -98,11 +100,11 @@ To find devices on the old subnet, ARP-probe it from the Pi (sender IP `0.0.0.0`
 
 | Path | Source | Codec | PTZ container | Notes |
 |------|--------|-------|---------------|-------|
-| cam1 | rtsp://192.168.1.101 channel 1 | H265 | — | NVR, 1280x720 |
-| cam2 | rtsp://192.168.1.101 channel 2 | H265 | — | NVR, 1280x720 |
-| cam3 | rtsp://192.168.18.61/stream2 | H264 | `tapo-ptz` | Tapo C520WS "Old Parlour" — `www/tapo.html` |
+| cam1 | rtsp://192.168.18.81 channel 1 | H265 | — | NVR, 1280x720 |
+| cam2 | rtsp://192.168.18.81 channel 2 | H265 | — | NVR, 1280x720 |
+| cam3 | rtsp://192.168.18.80/stream2 | H264 | `tapo-ptz` | Tapo C520WS "Old Parlour" — `www/tapo.html` |
 | cam4 | rtsp://192.168.18.59/stream2 | H264 | `tapo-ptz2` | Tapo "The Back" — user `theback` |
-| cam5 | rtsp://192.168.18.76/stream2 | H264 | `tapo-ptz4` | Tapo "Dry Cows" — user `drycows`, `www/cam5.html` |
+| cam5 | rtsp://192.168.18.72/stream2 | H264 | `tapo-ptz4` | Tapo "Dry Cows" — user `drycows`, `www/cam5.html` |
 | rosie | rtsp://192.168.18.79/stream2 | H264 | `tapo-ptz3` | Tapo C520WS "Hayshed" — user `hayShed` (capital S), `www/rosie.html` |
 
 Cameras behind the wireless bridge have shown 35–45% loss on 1400-byte packets — test with `ping -s 1400 <cam-ip>` from the Pi before blaming mediamtx.
