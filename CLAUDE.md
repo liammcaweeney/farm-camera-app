@@ -80,7 +80,9 @@ This was only possible because the home connection has a real routable IP (`193.
 
 ## Cameras
 
-> **Status 2026-10-30:** all six cameras are live. The NVR moved onto the house LAN at `192.168.18.81` (DHCP; RTSP, DVRIP 34567 and web `/nvr/` all checked there), so cam1/cam2 and the Caddy `/nvr/` route now point at `.81`. The `192.168.1.46` address on `wlan0` is no longer needed for it. cam5 (Dry Cows) came back on `192.168.18.72`, its router reservation, with the `drycows` login. cam3 ("Left of the Lawnmower", formerly Old Parlour) is live on `192.168.18.80` with Camera Account `leftLawnmower`. `.env` camera vars are stale; the live credentials are in `mediamtx.yml` and `docker-compose.yml`.
+> **2026-11-17:** NVR drifted again, `.81` → `.85` (DHCP, no reservation); cam1/cam2 froze from 2026-10-30 20:30 until repointed. Reserve the NVR's IP on the router to stop this.
+>
+> **Status 2026-10-30:** all six cameras are live. The NVR moved onto the house LAN at `192.168.18.85` (DHCP; RTSP, DVRIP 34567 and web `/nvr/` all checked there), so cam1/cam2 and the Caddy `/nvr/` route now point at `.81`. The `192.168.1.46` address on `wlan0` is no longer needed for it. cam5 (Dry Cows) came back on `192.168.18.72`, its router reservation, with the `drycows` login. cam3 ("Left of the Lawnmower", formerly Old Parlour) is live on `192.168.18.80` with Camera Account `leftLawnmower`. `.env` camera vars are stale; the live credentials are in `mediamtx.yml` and `docker-compose.yml`.
 >
 > Status 2026-09-26: cam4 ("The Back") streams on `192.168.18.59` (`ready=true`). cam5 ("Dry Cows") was found at `192.168.18.60` after a factory reset — its config had the wrong user *and* IP (`camera@.56`); correct is `drycows@.60`. cam3 (`.61`) is absent from the LAN entirely: a full `192.168.18.0/24` sweep found only `.59` and `.60` with port 554 open. rosie ("Hayshed") is live on `192.168.18.79` as of 2026-10-04. cam1/cam2 are live again via the NVR on `192.168.1.101` (see below).
 >
@@ -100,8 +102,8 @@ To find devices on the old subnet, ARP-probe it from the Pi (sender IP `0.0.0.0`
 
 | Path | Source | Codec | PTZ container | Notes |
 |------|--------|-------|---------------|-------|
-| cam1 | rtsp://192.168.18.81 channel 1 | H265 | — | NVR, 1280x720 |
-| cam2 | rtsp://192.168.18.81 channel 2 | H265 | — | NVR, 1280x720 |
+| cam1 | rtsp://192.168.18.85 channel 1 | H265 | — | NVR, 1280x720 |
+| cam2 | rtsp://192.168.18.85 channel 2 | H265 | — | NVR, 1280x720 |
 | cam3 | rtsp://192.168.18.80/stream2 | H264 | `tapo-ptz` | Tapo C520WS "Left of the Lawnmower" (user `leftLawnmower`) — `www/tapo.html` |
 | cam4 | rtsp://192.168.18.59/stream2 | H264 | `tapo-ptz2` | Tapo "The Back" — user `theback` |
 | cam5 | rtsp://192.168.18.72/stream2 | H264 | `tapo-ptz4` | Tapo "Dry Cows" — user `drycows`, `www/cam5.html` |
