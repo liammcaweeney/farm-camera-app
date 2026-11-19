@@ -80,6 +80,8 @@ This was only possible because the home connection has a real routable IP (`193.
 
 ## Cameras
 
+> **2026-11-19:** New Tapo "Old Parlour" added as cam6 on `192.168.18.61` (PTZ container `tapo-ptz5`, Caddy `/tapo-ptz5*`).
+>
 > **2026-11-17:** NVR drifted again, `.81` → `.85` (DHCP, no reservation); cam1/cam2 froze from 2026-10-30 20:30 until repointed. Reserve the NVR's IP on the router to stop this.
 >
 > **Status 2026-10-30:** all six cameras are live. The NVR moved onto the house LAN at `192.168.18.85` (DHCP; RTSP, DVRIP 34567 and web `/nvr/` all checked there), so cam1/cam2 and the Caddy `/nvr/` route now point at `.81`. The `192.168.1.46` address on `wlan0` is no longer needed for it. cam5 (Dry Cows) came back on `192.168.18.72`, its router reservation, with the `drycows` login. cam3 ("Left of the Lawnmower", formerly Old Parlour) is live on `192.168.18.80` with Camera Account `leftLawnmower`. `.env` camera vars are stale; the live credentials are in `mediamtx.yml` and `docker-compose.yml`.
@@ -108,6 +110,7 @@ To find devices on the old subnet, ARP-probe it from the Pi (sender IP `0.0.0.0`
 | cam4 | rtsp://192.168.18.59/stream2 | H264 | `tapo-ptz2` | Tapo "The Back" — user `theback` |
 | cam5 | rtsp://192.168.18.72/stream2 | H264 | `tapo-ptz4` | Tapo "Dry Cows" — user `drycows`, `www/cam5.html` |
 | rosie | rtsp://192.168.18.79/stream2 | H264 | `tapo-ptz3` | Tapo C520WS "Hayshed" — user `hayShed` (capital S), `www/rosie.html` |
+| cam6 | rtsp://192.168.18.61/stream2 | H264 | `tapo-ptz5` | Tapo "Old Parlour" (added 2026-11-19), user `oldparlour`, MAC `78:20:51:68:DA:28`, `www/cam6.html` |
 
 Cameras behind the wireless bridge have shown 35–45% loss on 1400-byte packets — test with `ping -s 1400 <cam-ip>` from the Pi before blaming mediamtx.
 

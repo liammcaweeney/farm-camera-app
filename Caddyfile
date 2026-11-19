@@ -58,6 +58,11 @@ wedding.killywilly.duckdns.org {
     @tapo path /tapo /tapo/
     redir @tapo /cameras/tapo.html 302
 
+    handle /tapo-ptz5* {
+        uri replace /tapo-ptz5 /tapo-ptz
+        reverse_proxy tapo-ptz5:3001
+    }
+
     handle /tapo-ptz4* {
         uri replace /tapo-ptz4 /tapo-ptz
         reverse_proxy tapo-ptz4:3001
